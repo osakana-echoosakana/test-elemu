@@ -19,6 +19,7 @@ const mMra = require('./lib/Mra.js');
 const mManufacturerTable = require('./lib/ManufacturerTable.js');
 const mUserConf = require('./lib/UserConf.js');
 const mConsole = require('./lib/Console.js');
+const mPowerSimulator = require('./lib/PowerSimulator.js');
 
 class Emulator {
   /* ------------------------------------------------------------------
@@ -32,6 +33,7 @@ class Emulator {
 
     this._device = null;
     this._api = null;
+    this._sim = null;
     this._console = new mConsole();
     this._http = new mHttpServer(this._conf, this._console);
     this._uconf = new mUserConf(this._conf);
@@ -76,6 +78,11 @@ class Emulator {
 
     // HTTP REST API エンドポイントの構築
     this._api = new mHttpApi(this._conf, this._device, this._uconf, mMra, mManufacturerTable);
+
+    // 電力シミュレーター（時刻加速・低圧スマートメーター・太陽光・蓄電池）
+    this._sim = new mPowerSimulator(this._conf, this._device);
+    this._api.setSimulator(this._sim);
+    this._sim.start();
 
     this._console.printSysInfo('This emulator is ready');
   }
@@ -166,6 +173,9 @@ class Emulator {
 
     // デバイス起動
     await device.start();
+    if (this._sim) {
+        this._sim.setDevice(device);
+    }
     return device;
   }
 
@@ -223,6 +233,9 @@ class Emulator {
     }
     if (this._api) {
       this._api.updateConf(this._conf);
+    }
+    if (this._sim) {
+      this._sim.updateConf(this._conf);
     }
     if (this._device) {
       this._device.updateConf(this._conf);

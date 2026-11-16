@@ -1,13 +1,14 @@
 {
   "name": "elemu",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "ECHONET Lite 機器エミュレーター",
   "main": "index.js",
   "directories": {
     "lib": "lib"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test \"tests/*.test.js\""
   },
   "dependencies": {
     "express": "^4.17.2",
