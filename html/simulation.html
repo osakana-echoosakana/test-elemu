@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>電力シミュレーション</title>
+<link rel="stylesheet" href="/lib/bootstrap/css/bootstrap.min.css">
+<link rel="stylesheet" href="/lib/fontawesome-free/css/all.min.css">
+<style>
+  body { background: #f4f6f8; }
+  .card { margin-bottom: 16px; }
+  .metric { font-size: 1.5rem; font-weight: 600; }
+  .metric small { font-size: .8rem; color: #6c757d; font-weight: 400; }
+  .flow-buy { color: #c0392b; }
+  .flow-sell { color: #27ae60; }
+  #toast { position: fixed; right: 16px; bottom: 16px; min-width: 240px; display: none; }
+  @media (max-width: 576px) { .metric { font-size: 1.25rem; } }
+</style>
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/">ECHONET Lite 機器エミュレータ</a>
+    <span class="navbar-text text-white">電力シミュレーション</span>
+  </div>
+</nav>
+
+<div class="container-fluid px-3 py-3">
+  <div id="alert" class="alert alert-danger d-none" role="alert"></div>
+
+  <!-- 状態 -->
+  <div class="row">
+    <div class="col-6 col-md-3"><div class="card"><div class="card-body">
+      <div class="text-muted small">シミュレーション時刻</div>
+      <div class="metric" id="m-time">-</div>
+      <div class="small text-muted">加速 <span id="m-speed">-</span> 倍 · <span id="m-running">-</span></div>
+    </div></div></div>
+    <div class="col-6 col-md-3"><div class="card"><div class="card-body">
+      <div class="text-muted small">太陽光発電（AC）</div>
+      <div class="metric" id="m-pv">-<small> W</small></div>
+      <div class="small text-muted">出力抑制 <span id="m-curtail">-</span> W</div>
+    </div></div></div>
+    <div class="col-6 col-md-3"><div class="card"><div class="card-body">
+      <div class="text-muted small">機器の消費電力</div>
+      <div class="metric" id="m-load">-<small> W</small></div>
+    </div></div></div>
+    <div class="col-6 col-md-3"><div class="card"><div class="card-body">
+      <div class="text-muted small">蓄電池</div>
+      <div class="metric" id="m-soc">-<small> %</small></div>
+      <div class="small text-muted"><span id="m-batt-w">-</span> W · <span id="m-batt-mode">-</span></div>
+    </div></div></div>
+  </div>
+
+  <div class="row">
+    <div class="col-12 col-md-6"><div class="card"><div class="card-body">
+      <div class="text-muted small">買電・売電（低圧スマートメーター）</div>
+      <div class="metric" id="m-grid">-</div>
+      <table class="table table-sm mt-2 mb-0">
+        <tr><th>積算買電</th><td class="text-end" id="m-buy">-</td></tr>
+        <tr><th>積算売電（逆潮流）</th><td class="text-end" id="m-sell">-</td></tr>
+        <tr><th>積算発電</th><td class="text-end" id="m-pv-wh">-</td></tr>
+        <tr><th>積算出力抑制</th><td class="text-end" id="m-curtail-wh">-</td></tr>
+        <tr><th>蓄電池 積算充電 / 放電</th><td class="text-end" id="m-batt-wh">-</td></tr>
+      </table>
+      <button class="btn btn-outline-secondary btn-sm mt-2" id="btn-reset">積算値をリセット</button>
+    </div></div></div>
+
+    <div class="col-12 col-md-6"><div class="card"><div class="card-body">
+      <div class="text-muted small mb-2">操作</div>
+
+      <div class="mb-3">
+        <label class="form-label" for="in-speed">時刻加速倍率（実時間1秒あたりのシミュレーション秒数）</label>
+        <div class="input-group">
+          <input type="number" class="form-control" id="in-speed" min="0.001" step="1">
+          <button class="btn btn-primary" data-action="speed">適用</button>
+        </div>
+        <div class="form-text">例: 60 で実時間 1 秒が 1 分、3600 で 1 時間。</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="in-clock">シミュレーション時刻</label>
+        <div class="input-group">
+          <input type="datetime-local" class="form-control" id="in-clock">
+          <button class="btn btn-primary" data-action="clock">設定</button>
+        </div>
+      </div>
+
+      <div class="mb-3 form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="in-sell">
+        <label class="form-check-label" for="in-sell">売電を許可する（OFF は余剰電力を出力抑制）</label>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="in-mode">蓄電池の運転モード</label>
+        <div class="input-group">
+          <select class="form-select" id="in-mode">
+            <option value="auto">自動（余剰を充電、不足を放電）</option>
+            <option value="charge">充電</option>
+            <option value="discharge">放電</option>
+            <option value="idle">待機</option>
+          </select>
+          <button class="btn btn-primary" data-action="battery">適用</button>
+        </div>
+        <label class="form-label small mt-2 mb-0" for="in-soc">蓄電残量 <span id="soc-val">-</span> %</label>
+        <div class="input-group">
+          <input type="range" class="form-range" id="in-soc" min="0" max="100" step="1">
+          <button class="btn btn-outline-primary" data-action="soc">残量を適用</button>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="in-pv">太陽光の発電量テスト値（W。空欄で天候モデルに戻す）</label>
+        <div class="input-group">
+          <input type="number" class="form-control" id="in-pv" min="0" step="100" placeholder="空欄 = 天候モデル">
+          <button class="btn btn-primary" data-action="pv">適用</button>
+        </div>
+        <div class="input-group mt-2">
+          <span class="input-group-text">天候係数</span>
+          <input type="number" class="form-control" id="in-weather" min="0" max="2" step="0.1">
+          <button class="btn btn-outline-primary" data-action="weather">適用</button>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+
+  <!-- 機器 -->
+  <div class="card"><div class="card-body">
+    <div class="text-muted small mb-2">機器（電源と消費電力の上書き。空欄は既定値）</div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>EOJ</th><th>電源</th><th>消費電力 (W)</th><th>積算 (Wh)</th><th></th></tr></thead>
+        <tbody id="consumers"><tr><td colspan="5" class="text-muted">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+  </div></div>
+
+  <!-- シナリオ -->
+  <div class="card"><div class="card-body">
+    <div class="text-muted small mb-2">シナリオ（システム全体の書き出し・読み込み）</div>
+    <button class="btn btn-outline-primary" id="btn-export"><i class="fas fa-file-export"></i> 書き出し</button>
+    <label class="btn btn-outline-primary mb-0 ms-2">
+      <i class="fas fa-file-import"></i> 読み込み
+      <input type="file" id="file-import" accept="application/json,.json" class="d-none">
+    </label>
+  </div></div>
+</div>
+
+<div id="toast" class="toast align-items-center text-bg-success border-0 show" role="status"></div>
+
+<script>
+(function () {
+  'use strict';
+  var API = '/api/simulation';
+  var state = null;
+  var editing = {};   // 入力中の欄は再描画で上書きしない
+  var $ = function (id) { return document.getElementById(id); };
+
+  function fmt(n, digits) {
+    if (n === null || n === undefined || isNaN(n)) return '-';
+    return Number(n).toLocaleString('ja-JP', { maximumFractionDigits: digits === undefined ? 0 : digits });
+  }
+  function toast(msg, ok) {
+    var t = $('toast');
+    t.className = 'toast align-items-center border-0 show text-bg-' + (ok === false ? 'danger' : 'success');
+    t.textContent = msg;
+    t.style.display = 'block';
+    clearTimeout(toast._id);
+    toast._id = setTimeout(function () { t.style.display = 'none'; }, 2500);
+  }
+  function showError(msg) {
+    var a = $('alert');
+    if (msg) { a.textContent = msg; a.classList.remove('d-none'); }
+    else { a.classList.add('d-none'); }
+  }
+
+  // API 呼び出し。応答の data を返す。失敗時は例外。
+  function call(method, path, body) {
+    var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
+    if (body !== undefined) opt.body = JSON.stringify(body);
+    return fetch(API + path, opt).then(function (r) {
+      return r.json().then(function (j) {
+        if (j.result !== 0 || j.code >= 400) throw new Error(j.message || ('HTTP ' + j.code));
+        return j.data;
+      });
+    });
+  }
+
+  function apply(label, method, path, body) {
+    return call(method, path, body).then(function (data) {
+      showError('');
+      toast(label + ' を反映しました');
+      if (data) render(data);
+      return data;
+    }).catch(function (e) {
+      showError(label + ' に失敗: ' + e.message);
+      toast(e.message, false);
+    });
+  }
+
+  function render(s) {
+    state = s;
+    var last = s.last || {};
+    var m = s.meter || {};
+
+    $('m-time').textContent = new Date(s.time).toLocaleString('ja-JP');
+    $('m-speed').textContent = fmt(s.speed, 3);
+    $('m-running').textContent = s.running ? '動作中' : '停止中';
+    $('m-pv').innerHTML = fmt(last.pv_ac_w) + '<small> W</small>';
+    $('m-curtail').textContent = fmt(last.curtail_w);
+    $('m-load').innerHTML = fmt(last.load_w) + '<small> W</small>';
+    $('m-soc').innerHTML = fmt((s.battery.soc || 0) * 100, 1) + '<small> %</small>';
+    $('m-batt-w').textContent = fmt(last.battery_w);
+    $('m-batt-mode').textContent = { auto: '自動', charge: '充電', discharge: '放電', idle: '待機' }[s.battery.mode] || s.battery.mode;
+
+    var gw = last.grid_w || 0;
+    var grid = $('m-grid');
+    if (gw > 0) { grid.className = 'metric flow-buy'; grid.textContent = '買電 ' + fmt(gw) + ' W'; }
+    else if (gw < 0) { grid.className = 'metric flow-sell'; grid.textContent = '売電 ' + fmt(-gw) + ' W'; }
+    else { grid.className = 'metric'; grid.textContent = '0 W'; }
+
+    $('m-buy').textContent = fmt(m.buy_wh, 1) + ' Wh';
+    $('m-sell').textContent = fmt(m.sell_wh, 1) + ' Wh';
+    $('m-pv-wh').textContent = fmt(m.pv_wh, 1) + ' Wh';
+    $('m-curtail-wh').textContent = fmt(m.curtail_wh, 1) + ' Wh';
+    $('m-batt-wh').textContent = fmt(m.battery_charge_wh, 1) + ' / ' + fmt(m.battery_discharge_wh, 1) + ' Wh';
+
+    // 入力欄（編集中でなければ現在値を表示）
+    if (!editing['in-speed']) $('in-speed').value = s.speed;
+    if (!editing['in-sell']) $('in-sell').checked = !!s.sell_enabled;
+    if (!editing['in-mode']) $('in-mode').value = s.battery.mode;
+    if (!editing['in-soc']) { $('in-soc').value = Math.round((s.battery.soc || 0) * 100); }
+    $('soc-val').textContent = $('in-soc').value;
+    if (!editing['in-pv']) $('in-pv').value = (s.pv.test_w === null || s.pv.test_w === undefined) ? '' : s.pv.test_w;
+    if (!editing['in-weather']) $('in-weather').value = s.pv.weather_factor;
+    if (!editing['in-clock']) $('in-clock').value = toLocalInput(s.time);
+
+    renderConsumers(s.consumers || []);
+  }
+
+  function toLocalInput(iso) {
+    var d = new Date(iso);
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+      'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+
+  function renderConsumers(list) {
+    var tbody = $('consumers');
+    tbody.innerHTML = '';
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-muted">機器がありません</td></tr>';
+      return;
+    }
+    list.forEach(function (c) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td><code></code></td>' +
+        '<td><div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox"></div></td>' +
+        '<td><div class="input-group input-group-sm" style="max-width:220px">' +
+        '<input type="number" class="form-control" min="0" step="10" placeholder="既定値">' +
+        '<button class="btn btn-outline-primary" type="button">適用</button></div></td>' +
+        '<td class="text-end">' + fmt(c.energy_wh, 1) + '</td>' +
+        '<td></td>';
+      tr.querySelector('code').textContent = c.eoj;
+      var sw = tr.querySelector('input[type=checkbox]');
+      sw.checked = !!c.on;
+      sw.addEventListener('change', function () {
+        apply(c.eoj + ' の電源', 'PUT', '/consumer', { eoj: c.eoj, on: sw.checked });
+      });
+      var num = tr.querySelector('input[type=number]');
+      num.value = c.watts;
+      num.addEventListener('focus', function () { editing['cons-' + c.eoj] = true; });
+      num.addEventListener('blur', function () { editing['cons-' + c.eoj] = false; });
+      tr.querySelector('button').addEventListener('click', function () {
+        var v = num.value.trim();
+        apply(c.eoj + ' の消費電力', 'PUT', '/consumer', { eoj: c.eoj, watts: v === '' ? null : Number(v) });
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  // 入力欄のフォーカス状態を追跡（編集中は再描画で値を上書きしない）
+  ['in-speed', 'in-clock', 'in-mode', 'in-soc', 'in-pv', 'in-weather'].forEach(function (id) {
+    $(id).addEventListener('focus', function () { editing[id] = true; });
+    $(id).addEventListener('blur', function () { editing[id] = false; });
+  });
+  $('in-soc').addEventListener('input', function () { $('soc-val').textContent = this.value; });
+
+  document.querySelectorAll('[data-action]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var a = btn.getAttribute('data-action');
+      if (a === 'speed') {
+        apply('時刻加速倍率', 'PUT', '/speed', { speed: Number($('in-speed').value) });
+      } else if (a === 'clock') {
+        var v = $('in-clock').value;
+        if (!v) return;
+        apply('シミュレーション時刻', 'PUT', '/clock', { time: v });
+      } else if (a === 'battery') {
+        apply('蓄電池のモード', 'PUT', '/battery', { mode: $('in-mode').value });
+      } else if (a === 'soc') {
+        apply('蓄電残量', 'PUT', '/battery', { soc: Number($('in-soc').value) / 100 });
+      } else if (a === 'pv') {
+        var t = $('in-pv').value.trim();
+        apply('太陽光の発電量', 'PUT', '/pv', { test_w: t === '' ? null : Number(t) });
+      } else if (a === 'weather') {
+        apply('天候係数', 'PUT', '/pv', { weather_factor: Number($('in-weather').value) });
+      }
+    });
+  });
+
+  $('in-sell').addEventListener('change', function () {
+    apply('売電の設定', 'PUT', '/policy', { sell_enabled: this.checked });
+  });
+  $('btn-reset').addEventListener('click', function () {
+    if (!window.confirm('積算値をリセットします。よろしいですか？')) return;
+    apply('積算値のリセット', 'POST', '/reset');
+  });
+
+  $('btn-export').addEventListener('click', function () {
+    call('GET', '/scenario').then(function (data) {
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'elemu-scenario.json';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+      toast('シナリオを書き出しました');
+    }).catch(function (e) { showError('書き出しに失敗: ' + e.message); });
+  });
+
+  $('file-import').addEventListener('change', function () {
+    var f = this.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var data;
+      try { data = JSON.parse(reader.result); }
+      catch (e) { showError('JSON の形式が正しくありません'); return; }
+      if (!window.confirm('現在の状態をシナリオで置き換えます。よろしいですか？')) return;
+      apply('シナリオの読み込み', 'POST', '/scenario', { scenario: data });
+    };
+    reader.readAsText(f);
+    this.value = '';
+  });
+
+  // 定期的に状態を取得
+  function poll() {
+    call('GET', '').then(function (s) { showError(''); render(s); })
+      .catch(function (e) { showError('状態の取得に失敗: ' + e.message); });
+  }
+  poll();
+  setInterval(poll, 2000);
+})();
+</script>
+</body>
+</html>

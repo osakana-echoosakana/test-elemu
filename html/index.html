@@ -44,6 +44,8 @@
 					<a class="btn" v-if="powerStatus === false" v-on:click="changePowerStatus(true)">
 						<i class="fas fa-power-off" style="color: gray;"></i>
 					</a>
+					<!-- 電力シミュレーション管理画面 -->
+					<a class="btn" href="simulation.html" title="電力シミュレーション"><i class="fas fa-bolt"></i></a>
 					<!-- 設定ボタン -->
 					<router-link to="/conf">
 						<a class="btn" title="Configurations"><i class="fas fa-cog"></i></a>
