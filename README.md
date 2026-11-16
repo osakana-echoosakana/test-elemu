@@ -105,6 +105,47 @@ Date | Version  | Description
 |0xCE  |力測積算無効電力量（遅れ）計測値履歴|0xE1で指定した履歴値
 |0xE7  |積算有効電力量計測値履歴|0xE1で指定した履歴値
 
+## 電力シミュレーション
+
+デフォルトで以下の機器構成を持ちます（保存済みの機器構成がない場合）。
+
+- 低圧スマート電力量メータ (0x0288)
+- 住宅用太陽光発電 (0x0279)
+- 蓄電池 (0x027D。パワコンの出力・効率を含む)
+- 家庭用エアコン (0x0130)、一般照明 (0x0290)、換気扇 (0x0133)
+
+機器の消費電力は機器クラスごとの大まかな既定値を使います（例: エアコン 700 W、照明 60 W）。
+電源 OFF の機器は 0 W として扱います。
+
+### 機能
+
+- **メーター集計**: 機器の消費電力、太陽光の発電、蓄電池の充放電から、買電・売電（逆潮流）・積算を自動計算し、各 EPC に反映します。
+- **太陽光**: 時系列データ (`profile`) またはテスト値 (`test_w`) で発電量を指定できます。指定がなければ天候係数 (`weather_factor`) を掛けた晴天モデルを使います。
+- **売電の切り替え**: `sell_enabled` を OFF にすると余剰電力は売電せず出力抑制します（EPC 0xD1 に反映）。
+- **蓄電池の切り替え**: `mode` で `auto`（自動）・`charge`（充電）・`discharge`（放電）・`idle`（待機）を選べます。運転モード EPC 0xDA を外部から Set した場合もこの設定に反映されます。
+- **時刻と加速**: シミュレーション時刻は `simulation_speed` 倍で進みます（例: 60 なら実時間 1 秒で 1 分）。
+- **シナリオ**: 機器構成・電源状態・機器の消費電力・太陽光・パワコン・蓄電池・積算値・設定を JSON で書き出し・読み込みできます。
+
+設定は `conf/config.js` の `simulation_enabled` / `simulation_speed` / `simulation_tick_msec` / `simulation_start` で指定します。
+
+### REST API
+
+| メソッド | パス | 内容 |
+|:--|:--|:--|
+| GET | /api/simulation | 状態の取得 |
+| PUT | /api/simulation/speed | 時刻加速倍率 `{"speed": 60}` |
+| PUT | /api/simulation/clock | シミュレーション時刻 `{"time": "2026-07-01T12:00:00"}` |
+| PUT | /api/simulation/policy | 売電の許可 `{"sell_enabled": false}` |
+| PUT | /api/simulation/battery | 蓄電池 `{"mode": "discharge", "soc": 0.8}` |
+| PUT | /api/simulation/pv | 太陽光 `{"test_w": 2500}` / `{"weather_factor": 0.6}` / `{"profile": [{"time": "...", "w": 0}]}` |
+| PUT | /api/simulation/pcs | パワコン `{"rated_kw": 5, "efficiency": 0.95}` |
+| PUT | /api/simulation/consumer | 機器 `{"eoj": "013001", "watts": 900, "on": true}` |
+| POST | /api/simulation/reset | 積算値のリセット |
+| GET | /api/simulation/scenario | シナリオの書き出し |
+| POST | /api/simulation/scenario | シナリオの読み込み `{"scenario": {...}}` |
+
+テスト: `npm test`（Node.js 標準のテストランナーを使用）
+
 ## FAQ
 
 Q:コンソール画面に以下のエラーが表示されます。  

@@ -108,5 +108,18 @@ module.exports = {
 	/* **************************************************************
 	* ECHONET Lite リクエストの最大再送回数 (回)
 	* ************************************************************ */
-	"request_retry_limit": 1
+	"request_retry_limit": 1,
+
+	/* **************************************************************
+	* 電力シミュレーション
+	* - simulation_enabled: true で電力シミュレーションを動かす
+	* - simulation_speed  : 時刻加速倍率 (実時間 1 秒あたりのシミュレーション秒数)
+	*                       例: 60 なら実時間 1 秒で 1 分進む
+	* - simulation_tick_msec: 実時間で何ミリ秒ごとに計算するか
+	* - simulation_start  : 開始時刻 (ISO 8601 形式)。null なら現在時刻
+	* ************************************************************ */
+	"simulation_enabled": true,
+	"simulation_speed": 1,
+	"simulation_tick_msec": 1000,
+	"simulation_start": null
 };
