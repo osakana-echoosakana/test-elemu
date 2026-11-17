@@ -109,3 +109,20 @@ test('scenario export includes device power states and import restores them', as
   assert.equal(objs2['028801'].epcs['80'], '30');
   assert.equal(sim2.system.now.toISOString(), sim.system.now.toISOString());
 });
+
+test('E7 instantaneous power is signed (buy positive) and stays inside the spec range', async () => {
+  const objs = {
+    '028801': fakeObj({ '80': '30' }),
+    '013001': fakeObj({ '80': '30' }),
+  };
+  const sim = makeSim(objs);
+  sim.system.setPvTestWatts(0);
+  sim.system.setBatteryMode('idle');
+  // 買電: エアコン 700 W を夜間に 1 回計算
+  await sim._tick();
+  assert.equal(objs['028801'].epcs['E7'], (700 >>> 0).toString(16).toUpperCase().padStart(8, '0'));
+  // 範囲外の値は仕様の最大値 0x7FFFFFFD に丸める
+  sim.system.setConsumerWatts('013001', 3e9);
+  await sim._tick();
+  assert.equal(objs['028801'].epcs['E7'], '7FFFFFFD');
+});
