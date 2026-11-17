@@ -152,7 +152,15 @@
   'use strict';
   var API = '/api/simulation';
   var state = null;
-  var editing = {};   // 入力中の欄は再描画で上書きしない
+  // 入力欄にフォーカスがある（編集中の）間は、定期的な再描画で値を上書きしない
+  function setIfIdle(el, value) {
+    if (document.activeElement === el) return;
+    el.value = value;
+  }
+  function setCheckedIfIdle(el, checked) {
+    if (document.activeElement === el) return;
+    el.checked = !!checked;
+  }
   var $ = function (id) { return document.getElementById(id); };
 
   function fmt(n, digits) {
@@ -225,14 +233,14 @@
     $('m-batt-wh').textContent = fmt(m.battery_charge_wh, 1) + ' / ' + fmt(m.battery_discharge_wh, 1) + ' Wh';
 
     // 入力欄（編集中でなければ現在値を表示）
-    if (!editing['in-speed']) $('in-speed').value = s.speed;
-    if (!editing['in-sell']) $('in-sell').checked = !!s.sell_enabled;
-    if (!editing['in-mode']) $('in-mode').value = s.battery.mode;
-    if (!editing['in-soc']) { $('in-soc').value = Math.round((s.battery.soc || 0) * 100); }
+    setIfIdle($('in-speed'), s.speed);
+    setCheckedIfIdle($('in-sell'), s.sell_enabled);
+    setIfIdle($('in-mode'), s.battery.mode);
+    setIfIdle($('in-soc'), Math.round((s.battery.soc || 0) * 100));
     $('soc-val').textContent = $('in-soc').value;
-    if (!editing['in-pv']) $('in-pv').value = (s.pv.test_w === null || s.pv.test_w === undefined) ? '' : s.pv.test_w;
-    if (!editing['in-weather']) $('in-weather').value = s.pv.weather_factor;
-    if (!editing['in-clock']) $('in-clock').value = toLocalInput(s.time);
+    setIfIdle($('in-pv'), (s.pv.test_w === null || s.pv.test_w === undefined) ? '' : s.pv.test_w);
+    setIfIdle($('in-weather'), s.pv.weather_factor);
+    setIfIdle($('in-clock'), toLocalInput(s.time));
 
     renderConsumers(s.consumers || []);
   }
@@ -244,46 +252,67 @@
       'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
 
+  // 機器一覧の行は EOJ ごとに 1 度だけ作り、以後は値だけを更新する（入力欄を作り直さない）
+  var consumerRows = {};
+
+  function createConsumerRow(eoj) {
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><code></code></td>' +
+      '<td><div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox"></div></td>' +
+      '<td><div class="input-group input-group-sm" style="max-width:220px">' +
+      '<input type="number" class="form-control" min="0" step="10" placeholder="既定値">' +
+      '<button class="btn btn-outline-primary" type="button">適用</button></div></td>' +
+      '<td class="text-end"></td>' +
+      '<td></td>';
+    tr.querySelector('code').textContent = eoj;
+    var row = {
+      tr: tr,
+      sw: tr.querySelector('input[type=checkbox]'),
+      num: tr.querySelector('input[type=number]'),
+      energy: tr.querySelector('td.text-end')
+    };
+    row.sw.addEventListener('change', function () {
+      apply(eoj + ' の電源', 'PUT', '/consumer', { eoj: eoj, on: row.sw.checked });
+    });
+    tr.querySelector('button').addEventListener('click', function () {
+      var v = row.num.value.trim();
+      apply(eoj + ' の消費電力', 'PUT', '/consumer', { eoj: eoj, watts: v === '' ? null : Number(v) });
+    });
+    return row;
+  }
+
   function renderConsumers(list) {
     var tbody = $('consumers');
-    tbody.innerHTML = '';
     if (list.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="text-muted">機器がありません</td></tr>';
+      consumerRows = {};
       return;
     }
+    if (Object.keys(consumerRows).length === 0) {
+      tbody.innerHTML = '';   // 「機器がありません」の行を消す
+    }
+    var seen = {};
     list.forEach(function (c) {
-      var tr = document.createElement('tr');
-      tr.innerHTML =
-        '<td><code></code></td>' +
-        '<td><div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox"></div></td>' +
-        '<td><div class="input-group input-group-sm" style="max-width:220px">' +
-        '<input type="number" class="form-control" min="0" step="10" placeholder="既定値">' +
-        '<button class="btn btn-outline-primary" type="button">適用</button></div></td>' +
-        '<td class="text-end">' + fmt(c.energy_wh, 1) + '</td>' +
-        '<td></td>';
-      tr.querySelector('code').textContent = c.eoj;
-      var sw = tr.querySelector('input[type=checkbox]');
-      sw.checked = !!c.on;
-      sw.addEventListener('change', function () {
-        apply(c.eoj + ' の電源', 'PUT', '/consumer', { eoj: c.eoj, on: sw.checked });
-      });
-      var num = tr.querySelector('input[type=number]');
-      num.value = c.watts;
-      num.addEventListener('focus', function () { editing['cons-' + c.eoj] = true; });
-      num.addEventListener('blur', function () { editing['cons-' + c.eoj] = false; });
-      tr.querySelector('button').addEventListener('click', function () {
-        var v = num.value.trim();
-        apply(c.eoj + ' の消費電力', 'PUT', '/consumer', { eoj: c.eoj, watts: v === '' ? null : Number(v) });
-      });
-      tbody.appendChild(tr);
+      seen[c.eoj] = true;
+      var row = consumerRows[c.eoj];
+      if (!row) {
+        row = createConsumerRow(c.eoj);
+        consumerRows[c.eoj] = row;
+        tbody.appendChild(row.tr);
+      }
+      row.energy.textContent = fmt(c.energy_wh, 1);
+      setCheckedIfIdle(row.sw, c.on);
+      setIfIdle(row.num, c.watts);
+    });
+    Object.keys(consumerRows).forEach(function (eoj) {
+      if (!seen[eoj]) {
+        consumerRows[eoj].tr.remove();
+        delete consumerRows[eoj];
+      }
     });
   }
 
-  // 入力欄のフォーカス状態を追跡（編集中は再描画で値を上書きしない）
-  ['in-speed', 'in-clock', 'in-mode', 'in-soc', 'in-pv', 'in-weather'].forEach(function (id) {
-    $(id).addEventListener('focus', function () { editing[id] = true; });
-    $(id).addEventListener('blur', function () { editing[id] = false; });
-  });
   $('in-soc').addEventListener('input', function () { $('soc-val').textContent = this.value; });
 
   document.querySelectorAll('[data-action]').forEach(function (btn) {

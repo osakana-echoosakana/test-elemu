@@ -123,6 +123,21 @@ test('E7 instantaneous power is signed (buy positive) and stays inside the spec 
   assert.equal(objs['028801'].epcs['E7'], (700 >>> 0).toString(16).toUpperCase().padStart(8, '0'));
   // 範囲外の値は仕様の最大値 0x7FFFFFFD に丸める
   sim.system.setConsumerWatts('013001', 3e9);
+  sim._lastTickMs = Date.now() - 1000; // 直前の周期と同じ ms にならないよう、実時間 1 秒ぶん進めたことにする
   await sim._tick();
   assert.equal(objs['028801'].epcs['E7'], '7FFFFFFD');
+});
+
+test('each consumer profile reports its simulated power in EPC 0x84', async () => {
+  const objs = {
+    '028801': fakeObj({ '80': '30' }),
+    '013001': fakeObj({ '80': '30' }),  // エアコン ON -> 700 W
+    '029001': fakeObj({ '80': '31' }),  // 照明 OFF -> 0 W
+  };
+  const sim = makeSim(objs);
+  sim.system.setPvTestWatts(0);
+  sim.system.setBatteryMode('idle');
+  await sim._tick();
+  assert.equal(objs['013001'].epcs['84'], '02BC');  // 700
+  assert.equal(objs['029001'].epcs['84'], '0000');  // OFF は 0
 });
