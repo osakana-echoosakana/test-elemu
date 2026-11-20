@@ -117,9 +117,15 @@ module.exports = {
 	*                       例: 60 なら実時間 1 秒で 1 分進む
 	* - simulation_tick_msec: 実時間で何ミリ秒ごとに計算するか
 	* - simulation_start  : 開始時刻 (ISO 8601 形式)。null なら現在時刻
+	* - simulation_ev_enabled  : EV 充放電器 (0x027E) をシミュレーションに含める (false なら充放電・履歴・表示に反映しない)
+	* - simulation_ev_charge   : EV への充電を許可する (余剰電力で充電)
+	* - simulation_ev_discharge: EV からの放電を許可する (不足電力を補う)
 	* ************************************************************ */
 	"simulation_enabled": true,
 	"simulation_speed": 1,
 	"simulation_tick_msec": 1000,
-	"simulation_start": null
+	"simulation_start": null,
+	"simulation_ev_enabled": false,
+	"simulation_ev_charge": true,
+	"simulation_ev_discharge": true
 };

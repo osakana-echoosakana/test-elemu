@@ -61,6 +61,8 @@
         <tr><th>積算発電</th><td class="text-end" id="m-pv-wh">-</td></tr>
         <tr><th>積算出力抑制</th><td class="text-end" id="m-curtail-wh">-</td></tr>
         <tr><th>蓄電池 積算充電 / 放電</th><td class="text-end" id="m-batt-wh">-</td></tr>
+        <tr id="row-ev" hidden><th>EV 瞬時充放電（+充電 / −放電）</th><td class="text-end" id="m-ev-w">-</td></tr>
+        <tr id="row-ev-wh" hidden><th>EV 積算充電 / 放電</th><td class="text-end" id="m-ev-wh">-</td></tr>
       </table>
       <button class="btn btn-outline-secondary btn-sm mt-2" id="btn-reset">積算値をリセット</button>
     </div></div></div>
@@ -106,6 +108,23 @@
           <input type="range" class="form-range" id="in-soc" min="0" max="100" step="1">
           <button class="btn btn-outline-primary" data-action="soc">残量を適用</button>
         </div>
+      </div>
+
+      <div class="mb-3">
+        <div class="form-label mb-1">EV 充放電器（機器一覧に 0x027E があるときに反映）</div>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="in-ev-enabled">
+          <label class="form-check-label" for="in-ev-enabled">EV 機能を有効にする（OFF の間は充放電・積算・表示に含めない）</label>
+        </div>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="in-ev-charge">
+          <label class="form-check-label" for="in-ev-charge">充電を許可する（余剰電力で充電）</label>
+        </div>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="in-ev-discharge">
+          <label class="form-check-label" for="in-ev-discharge">放電を許可する（不足電力を補う）</label>
+        </div>
+        <button class="btn btn-primary btn-sm mt-2" data-action="ev">EV 設定を適用</button>
       </div>
 
       <div class="mb-3">
@@ -232,10 +251,24 @@
     $('m-curtail-wh').textContent = fmt(m.curtail_wh, 1) + ' Wh';
     $('m-batt-wh').textContent = fmt(m.battery_charge_wh, 1) + ' / ' + fmt(m.battery_discharge_wh, 1) + ' Wh';
 
+    // EV は有効なときだけ表示する
+    var evOn = Boolean(s.ev && s.ev.enabled);
+    $('row-ev').hidden = !evOn;
+    $('row-ev-wh').hidden = !evOn;
+    if (evOn) {
+      $('m-ev-w').textContent = fmt(last.ev_w);
+      $('m-ev-wh').textContent = fmt(m.ev_charge_wh, 1) + ' / ' + fmt(m.ev_discharge_wh, 1) + ' Wh';
+    }
+
     // 入力欄（編集中でなければ現在値を表示）
     setIfIdle($('in-speed'), s.speed);
     setCheckedIfIdle($('in-sell'), s.sell_enabled);
     setIfIdle($('in-mode'), s.battery.mode);
+    if (s.ev) {
+      setCheckedIfIdle($('in-ev-enabled'), s.ev.enabled);
+      setCheckedIfIdle($('in-ev-charge'), s.ev.charge_enabled);
+      setCheckedIfIdle($('in-ev-discharge'), s.ev.discharge_enabled);
+    }
     setIfIdle($('in-soc'), Math.round((s.battery.soc || 0) * 100));
     $('soc-val').textContent = $('in-soc').value;
     setIfIdle($('in-pv'), (s.pv.test_w === null || s.pv.test_w === undefined) ? '' : s.pv.test_w);
@@ -326,6 +359,12 @@
         apply('シミュレーション時刻', 'PUT', '/clock', { time: v });
       } else if (a === 'battery') {
         apply('蓄電池のモード', 'PUT', '/battery', { mode: $('in-mode').value });
+      } else if (a === 'ev') {
+        apply('EV 充放電の設定', 'PUT', '/ev', {
+          enabled: $('in-ev-enabled').checked,
+          charge_enabled: $('in-ev-charge').checked,
+          discharge_enabled: $('in-ev-discharge').checked,
+        });
       } else if (a === 'soc') {
         apply('蓄電残量', 'PUT', '/battery', { soc: Number($('in-soc').value) / 100 });
       } else if (a === 'pv') {
