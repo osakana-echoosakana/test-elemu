@@ -104,3 +104,55 @@ test('time acceleration: EV counters scale with simulated time', () => {
   for (let i = 0; i < 60; i++) slow.step(60, []);
   assert.ok(Math.abs(slow.meter.ev_charge_wh - fast.meter.ev_charge_wh) < 1e-6);
 });
+
+test('manual charge mode uses the set output, capped by max_charge_w', () => {
+  const sys = new PowerSystem({ start: NOON });
+  sys.setPvTestWatts(0);
+  sys.setBatteryMode('idle');
+  sys.setEv({ enabled: true, mode: 'charge', power_w: 1500 });
+  sys.step(60, []);
+  assert.equal(sys._last.ev_w, 1500);
+
+  sys.setEv({ power_w: 9000 }); // max_charge_w 3000 で頭打ち
+  sys.step(60, []);
+  assert.equal(sys._last.ev_w, 3000);
+});
+
+test('manual discharge mode and idle mode', () => {
+  const sys = new PowerSystem({ start: NOON });
+  sys.setPvTestWatts(0);
+  sys.setBatteryMode('idle');
+  sys.setEv({ enabled: true, mode: 'discharge', power_w: 800 });
+  sys.step(60, []);
+  assert.equal(sys._last.ev_w, -800);
+
+  sys.setEv({ mode: 'idle' });
+  sys.step(60, []);
+  assert.equal(sys._last.ev_w, 0);
+});
+
+test('disconnected vehicle does not charge or discharge, even in manual mode', () => {
+  const sys = make({ enabled: true, connected: false, mode: 'charge', power_w: 2000 });
+  sys.step(60, []);
+  assert.equal(sys._last.ev_w, 0);
+  assert.equal(sys.meter.ev_charge_wh, 0);
+});
+
+test('vehicle SOC and capacity can be set; invalid mode is rejected', () => {
+  const sys = new PowerSystem({ start: NOON });
+  sys.setEv({ soc: 0.8, capacity_wh: 60000 });
+  assert.equal(sys.ev.soc, 0.8);
+  assert.equal(sys.ev.capacity_wh, 60000);
+  assert.throws(() => sys.setEv({ mode: 'boost' }), /ev.mode/);
+});
+
+test('scenario keeps EV mode, output and connection', () => {
+  const sys = new PowerSystem({ start: NOON });
+  sys.setEv({ enabled: true, connected: false, mode: 'discharge', power_w: 1200 });
+  const exported = sys.exportScenario();
+  const restored = new PowerSystem({ start: NOON });
+  restored.loadScenario(exported);
+  assert.equal(restored.ev.connected, false);
+  assert.equal(restored.ev.mode, 'discharge');
+  assert.equal(restored.ev.power_w, 1200);
+});
