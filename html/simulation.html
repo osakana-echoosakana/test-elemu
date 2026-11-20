@@ -117,12 +117,36 @@
           <label class="form-check-label" for="in-ev-enabled">EV 機能を有効にする（OFF の間は充放電・積算・表示に含めない）</label>
         </div>
         <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="in-ev-connected">
+          <label class="form-check-label" for="in-ev-connected">車両を接続している（未接続なら充放電しない）</label>
+        </div>
+        <div class="input-group mt-2">
+          <span class="input-group-text">運転モード</span>
+          <select class="form-select" id="in-ev-mode">
+            <option value="auto">自動（余剰を充電、不足を放電）</option>
+            <option value="charge">充電（出力指定）</option>
+            <option value="discharge">放電（出力指定）</option>
+            <option value="idle">待機</option>
+          </select>
+        </div>
+        <div class="input-group mt-2">
+          <span class="input-group-text">出力 (W)</span>
+          <input type="number" class="form-control" id="in-ev-power" min="0" step="100">
+        </div>
+        <div class="form-text">出力は充電・放電モードでのみ使い、上限は下の最大値で抑えます。</div>
+        <div class="form-check form-switch mt-2">
           <input class="form-check-input" type="checkbox" id="in-ev-charge">
-          <label class="form-check-label" for="in-ev-charge">充電を許可する（余剰電力で充電）</label>
+          <label class="form-check-label" for="in-ev-charge">充電を許可する（許可しないと充電は行わない）</label>
         </div>
         <div class="form-check form-switch">
           <input class="form-check-input" type="checkbox" id="in-ev-discharge">
-          <label class="form-check-label" for="in-ev-discharge">放電を許可する（不足電力を補う）</label>
+          <label class="form-check-label" for="in-ev-discharge">放電を許可する（許可しないと放電は行わない）</label>
+        </div>
+        <label class="form-label small mt-2 mb-0" for="in-ev-soc">車両の SOC <span id="ev-soc-val">-</span> %</label>
+        <input type="range" class="form-range" id="in-ev-soc" min="0" max="100" step="1">
+        <div class="input-group mt-1">
+          <span class="input-group-text">車載電池容量 (Wh)</span>
+          <input type="number" class="form-control" id="in-ev-cap" min="1" step="1000">
         </div>
         <button class="btn btn-primary btn-sm mt-2" data-action="ev">EV 設定を適用</button>
       </div>
@@ -266,8 +290,14 @@
     setIfIdle($('in-mode'), s.battery.mode);
     if (s.ev) {
       setCheckedIfIdle($('in-ev-enabled'), s.ev.enabled);
+      setCheckedIfIdle($('in-ev-connected'), s.ev.connected);
+      setIfIdle($('in-ev-mode'), s.ev.mode);
+      setIfIdle($('in-ev-power'), s.ev.power_w);
       setCheckedIfIdle($('in-ev-charge'), s.ev.charge_enabled);
       setCheckedIfIdle($('in-ev-discharge'), s.ev.discharge_enabled);
+      setIfIdle($('in-ev-soc'), Math.round((s.ev.soc || 0) * 100));
+      $('ev-soc-val').textContent = $('in-ev-soc').value;
+      setIfIdle($('in-ev-cap'), s.ev.capacity_wh);
     }
     setIfIdle($('in-soc'), Math.round((s.battery.soc || 0) * 100));
     $('soc-val').textContent = $('in-soc').value;
@@ -347,6 +377,7 @@
   }
 
   $('in-soc').addEventListener('input', function () { $('soc-val').textContent = this.value; });
+  $('in-ev-soc').addEventListener('input', function () { $('ev-soc-val').textContent = this.value; });
 
   document.querySelectorAll('[data-action]').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -360,10 +391,15 @@
       } else if (a === 'battery') {
         apply('蓄電池のモード', 'PUT', '/battery', { mode: $('in-mode').value });
       } else if (a === 'ev') {
-        apply('EV 充放電の設定', 'PUT', '/ev', {
+        apply('EV の設定', 'PUT', '/ev', {
           enabled: $('in-ev-enabled').checked,
+          connected: $('in-ev-connected').checked,
+          mode: $('in-ev-mode').value,
+          power_w: Number($('in-ev-power').value),
           charge_enabled: $('in-ev-charge').checked,
           discharge_enabled: $('in-ev-discharge').checked,
+          soc: Number($('in-ev-soc').value) / 100,
+          capacity_wh: Number($('in-ev-cap').value),
         });
       } else if (a === 'soc') {
         apply('蓄電残量', 'PUT', '/battery', { soc: Number($('in-soc').value) / 100 });

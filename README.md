@@ -138,7 +138,7 @@ EV 充放電器 (0x027E) は `simulation_ev_enabled`（既定 false）・`simula
 | PUT | /api/simulation/clock | シミュレーション時刻 `{"time": "2026-07-01T12:00:00"}` |
 | PUT | /api/simulation/policy | 売電の許可 `{"sell_enabled": false}` |
 | PUT | /api/simulation/battery | 蓄電池 `{"mode": "discharge", "soc": 0.8}` |
-| PUT | /api/simulation/ev | EV 充放電器 `{"enabled": true, "charge_enabled": true, "discharge_enabled": false}`（OFF の間は充放電・積算・表示に含めない） |
+| PUT | /api/simulation/ev | EV 充放電器 `{"enabled": true, "connected": true, "mode": "charge", "power_w": 3000, "soc": 0.6, "capacity_wh": 40000}`。`mode` は `auto` / `charge` / `discharge` / `idle`。`enabled` が OFF の間は充放電・積算・表示に含めない |
 | PUT | /api/simulation/pv | 太陽光 `{"test_w": 2500}` / `{"weather_factor": 0.6}` / `{"profile": [{"time": "...", "w": 0}]}` |
 | PUT | /api/simulation/pcs | パワコン `{"rated_kw": 5, "efficiency": 0.95}` |
 | PUT | /api/simulation/consumer | 機器 `{"eoj": "013001", "watts": 900, "on": true}` |
