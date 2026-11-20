@@ -89,3 +89,18 @@ test('setEv validates ranges', () => {
   assert.throws(() => sys.setEv({ soc: 2 }));
   assert.throws(() => sys.setEv({ max_charge_w: -1 }));
 });
+
+test('time acceleration: EV counters scale with simulated time', () => {
+  // 1 実時間秒 = 3600 シミュレーション秒（1 時間）で 1 ステップ分ずつ進める
+  const fast = make({ enabled: true });
+  fast.setSpeed(3600);
+  fast.advance(1, () => []);
+  // 1 時間ぶん 3000 W で充電 → 積算充電 ≈ 3000 Wh（SOC 変化の影響を除くため、量の上限内に収まる値で確認）
+  assert.ok(Math.abs(fast.meter.ev_charge_wh - 3000) < 1e-6, String(fast.meter.ev_charge_wh));
+  assert.equal(fast.meter.ev_discharge_wh, 0);
+
+  // 同じ条件を細かく進めても結果が一致する（早回しの分割に依存しない）
+  const slow = make({ enabled: true });
+  for (let i = 0; i < 60; i++) slow.step(60, []);
+  assert.ok(Math.abs(slow.meter.ev_charge_wh - fast.meter.ev_charge_wh) < 1e-6);
+});
