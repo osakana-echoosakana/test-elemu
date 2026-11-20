@@ -127,6 +127,7 @@ Date | Version  | Description
 - **シナリオ**: 機器構成・電源状態・機器の消費電力・太陽光・パワコン・蓄電池・積算値・設定を JSON で書き出し・読み込みできます。
 
 設定は `conf/config.js` の `simulation_enabled` / `simulation_speed` / `simulation_tick_msec` / `simulation_start` で指定します。
+EV 充放電器 (0x027E) は `simulation_ev_enabled`（既定 false）・`simulation_ev_charge`・`simulation_ev_discharge` で有効化と充放電を個別に切り替えられます。EV は余剰電力で充電し、不足電力を放電で補います。
 
 ### REST API
 
@@ -137,6 +138,7 @@ Date | Version  | Description
 | PUT | /api/simulation/clock | シミュレーション時刻 `{"time": "2026-07-01T12:00:00"}` |
 | PUT | /api/simulation/policy | 売電の許可 `{"sell_enabled": false}` |
 | PUT | /api/simulation/battery | 蓄電池 `{"mode": "discharge", "soc": 0.8}` |
+| PUT | /api/simulation/ev | EV 充放電器 `{"enabled": true, "charge_enabled": true, "discharge_enabled": false}`（OFF の間は充放電・積算・表示に含めない） |
 | PUT | /api/simulation/pv | 太陽光 `{"test_w": 2500}` / `{"weather_factor": 0.6}` / `{"profile": [{"time": "...", "w": 0}]}` |
 | PUT | /api/simulation/pcs | パワコン `{"rated_kw": 5, "efficiency": 0.95}` |
 | PUT | /api/simulation/consumer | 機器 `{"eoj": "013001", "watts": 900, "on": true}` |
